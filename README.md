@@ -2,7 +2,7 @@
 
 This learning project will train a custom convolutional neural network to classify a still image of one hand as **Rock**, **Paper**, or **Scissors**. It follows the full deep learning workflow so students can explain how data quality, CNN architecture, and evaluation choices affect the result.
 
-**Status** · Phase 1 technical checks passed and closure awaits explicit approval. Dataset preparation, training, evaluation, and the demo are planned work.
+**Status** · Phases 1 and 2 are closed. The project owner accepted the measured dataset counts and documented discrepancy. Phase 3 awaits separate approval.
 
 ## Scope and learning outcomes
 
@@ -12,7 +12,7 @@ Students will learn to detect leakage, reason about image tensors and convolutio
 
 ## Dataset and attribution
 
-The sole dataset is **Rock–Paper–Scissors Images** by Julien de la Bruère-Terreault (DrGFreeman), released under **CC BY-SA 4.0**. Published materials describe 2,188 real hand-gesture photographs, RGB PNGs at 300 × 200 pixels. Published Rock and Paper counts disagree across the source descriptions. Phase 2 will verify the acquired archive and record observed counts. The green background and limited variation in lighting and environment constrain claims about unfamiliar scenes. [Kaggle dataset](https://www.kaggle.com/datasets/drgfreeman/rockpaperscissors) · [Creator’s dataset overview](https://github.com/DrGFreeman/rps-cv-data-science#dataset) · [Dataset Design and source notes](docs/03_DATASET_DESIGN.md) · [Dataset license](https://creativecommons.org/licenses/by-sa/4.0/)
+The sole dataset is **Rock–Paper–Scissors Images** by Julien de la Bruère-Terreault (DrGFreeman), released under **CC BY-SA 4.0**. The acquired ZIP contained two byte-identical sets of 2,188 RGB PNGs at 300 × 200 pixels. Phase 2 retained 726 Rock, 712 Paper, and 750 Scissors images in the eligible inventory. Published class counts differ across source descriptions. The green background and limited variation in lighting and environment constrain claims about unfamiliar scenes. [Kaggle dataset](https://www.kaggle.com/datasets/drgfreeman/rockpaperscissors) · [Creator’s dataset overview](https://github.com/DrGFreeman/rps-cv-data-science#dataset) · [Observed counts and validation](docs/05_TEST_PLAN.md#phase-2-execution-evidence) · [Dataset license](https://creativecommons.org/licenses/by-sa/4.0/)
 
 The CC BY-SA notice applies to the dataset. A software license for this repository is pending approval.
 
@@ -84,6 +84,17 @@ $env:RPS_COLAB_SMOKE_DIR = 'artifacts/phase1/colab'
 ```
 
 Record the hosted notebook and Windows results in the [Test Plan](docs/05_TEST_PLAN.md#phase-1-execution-evidence).
+
+### Phase 2 dataset validation
+
+From the project root, run the approved archive through the local Python 3.13 environment. The command preserves the download and writes the raw copy, inventory, and validation results to Git-ignored paths keyed by the archive’s SHA-256.
+
+```powershell
+.\.venv313\Scripts\python.exe -m src.rps.dataset "$env:USERPROFILE\Downloads\archive (4).zip"
+.\.venv313\Scripts\python.exe -m pytest tests/test_dataset.py -q
+```
+
+Review the checks and observed counts in the [Test Plan](docs/05_TEST_PLAN.md#phase-2-execution-evidence).
 
 ### Later phases
 

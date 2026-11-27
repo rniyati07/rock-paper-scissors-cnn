@@ -101,7 +101,7 @@ The cases below supply verification evidence for the original [PRD acceptance cr
 
 ## Phase 1 execution evidence
 
-**Phase 1 readiness** · TP-01 passed on Windows and hosted Colab, including Colab-to-Windows portability. Existing execution evidence meets the revised TP-02. Phase 1 is ready for closure review and awaits explicit approval.
+**Phase 1 closed** · TP-01 passed on Windows and hosted Colab, including Colab-to-Windows portability. Existing execution evidence meets TP-02. The project owner explicitly approved Phase 1 closure and authorized Phase 2 implementation.
 
 The original Python 3.11.9 setup passed local verification before the approved move to Python 3.13. Its `.venv` and `rps-cnn` kernel are retained for rollback. Git 2.51.0 initialized the project root with zero commits. The ignore checks covered local environments, raw data, manifests, models, notebook checkpoints, caches, and credential filenames.
 
@@ -112,3 +112,26 @@ The original Python 3.11.9 setup passed local verification before the approved m
 | TP-01 · Hosted Colab | Passed (user-reported) | Python 3.13.16, TensorFlow 2.21.0, Keras 3.13.2, and NumPy 2.4.6. Jedi 0.20.1 installed successfully as a Colab runtime-specific dependency fix outside the project requirements. Hosted `pip check` reported `No broken requirements found.` Matrix multiplication returned `[[11.]]` on `/job:localhost/replica:0/task:0/device:GPU:0`, confirming GPU execution. The same-runtime `.keras` reload yielded a maximum absolute score difference of `0.0`. |
 | TP-01 · Colab-to-Windows transfer | Passed | The downloaded `.keras` model matched reference SHA-256 `3e9637e5e52b151614b39c989f90fe1ff0d5fd6af79a0a3b9778e3203ab94890`. Both files were copied and verified under `artifacts/phase1/colab/`. In `.venv313`, `pytest -q -s -k colab_export` returned **1 passed, 2 deselected**. The test confirmed matching core versions, top-class index `1` on both CPUs, and a maximum absolute score difference of `1.49011612e-08` against the `1e-5` limit. |
 | TP-02 · Prerequisite notebook execution | Passed | The registered `rps-cnn-313` kernel ran all four code cells and produced an inline PNG. The swatch decoded to `(2, 3, 3)`, formed a `(1, 2, 3, 3)` batch, and spanned `[0, 1]` after scaling. The fixed logits were `[-0.5, 0.75]` and the label-1 loss was approximately `0.251929`. |
+
+## Phase 2 execution evidence
+
+**Phase 2 closed** · The project owner approved closure based on the acquisition, inventory, and exact-duplicate evidence. The owner accepted the measured counts and the published-count discrepancy while preserving the original source labels. Phase 3 awaits separate approval. Its TP-04 broader visual and anomaly review and TP-05 perceptual and capture-session checks remain pending.
+
+| Check | Status | Evidence |
+| --- | --- | --- |
+| TP-03 · Source integrity | Passed | The approved Downloads ZIP was `archive (4).zip`, 320,716,788 bytes. Its SHA-256 is `3ba1e5daf5beba5358afe6f9c2e43ff9040789603e0405a81a50353a3ae2d508`. The raw copy matched the original. Preflight validated member names and extraction paths, and the rerun rechecked every extracted file against the preserved ZIP. The ZIP’s two identical README copies record CC BY-SA 4.0. The provenance JSON records the local file timestamp, archive fingerprint, and source attribution. The Kaggle release identifier and exact retrieval date were unavailable. |
+| TP-04 · Inventory and anomalies | Phase 2 passed | All 4,376 PNG entries were inventoried before curation and decoded as RGB, 300 × 200 pixels, with labels derived from the original class folders. Nine visual spot checks, three per class, matched their labels. Two README entries were counted separately. There were 2,188 eligible rows, 2,188 exact-copy exclusions, and zero pending rows. There were no decode, format, dimension, or source-label anomalies. |
+| TP-05 · Exact duplicates and lineage | Phase 2 passed | Each of the 2,188 same-path pairs matched both its file and decoded-pixel SHA-256. Both hash comparisons found 2,188 cross-tree duplicate groups and zero within-tree duplicate groups. An independent audit confirmed one eligible representative per group selected by ordinal path order, unchanged labels, and complete links from every copy. Perceptual and session checks remain scheduled for Phase 3. |
+
+| Count source | Rock | Paper | Scissors | Total |
+| --- | ---: | ---: | ---: | ---: |
+| Bundled README | 726 | 710 | 752 | 2,188 |
+| Creator’s project overview | 710 | 726 | 752 | 2,188 |
+| Observed entries per tree | 726 | 712 | 750 | 2,188 |
+| Eligible inventory | 726 | 712 | 750 | 2,188 |
+
+The accepted inventory has two more Paper and two fewer Scissors images than the bundled README. The creator’s overview also differs on Rock and Paper. The eligible inventory retains the ZIP’s original folder labels and duplicate lineage. The archive fingerprint identifies the measured dataset, and the differing published counts remain documented as provenance discrepancies. [Creator’s dataset overview](https://github.com/DrGFreeman/rps-cv-data-science#dataset)
+
+The full `.venv313` suite reported **21 passed** with two existing Keras deprecation warnings from the Phase 1 serialization test. A second run on the approved ZIP produced byte-identical provenance, inventory, and validation files. The inventory SHA-256 is `3ce3874c12e586aa4d29677be44e6a16155cbde82713ed980c8a0ed1acd1ff50`.
+
+Local evidence includes the [provenance JSON](../data/manifests/3ba1e5daf5beba5358afe6f9c2e43ff9040789603e0405a81a50353a3ae2d508/provenance.json), [inventory CSV](../data/manifests/3ba1e5daf5beba5358afe6f9c2e43ff9040789603e0405a81a50353a3ae2d508/inventory.csv), [validation report](../artifacts/data/3ba1e5daf5beba5358afe6f9c2e43ff9040789603e0405a81a50353a3ae2d508/validation.json), and [label spot-check](../artifacts/data/3ba1e5daf5beba5358afe6f9c2e43ff9040789603e0405a81a50353a3ae2d508/label-spot-check.png). Git ignores these directories.
