@@ -1,0 +1,23 @@
+# Local environments and Python tooling
+.venv/
+.venv313/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Dataset files, manifests, and generated artifacts
+/data/
+/artifacts/
+*.keras
+*.h5
+
+# Local credentials
+.env
+.env.*
+kaggle.json
+
+# Windows Explorer files
+Thumbs.db
+Desktop.ini
