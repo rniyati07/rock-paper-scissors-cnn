@@ -57,6 +57,7 @@ The critical path is the reviewed environment → validated inventory → EDA an
 - **Verification and traceability** · Reconcile plots with the inventory, reproduce sample selections, and review the rationale for each approved group and exclusion. FR-01, FR-02, FR-03, NFR-04 · AC-01, AC-05.
 - **Self-directed reflection** · How might green border pixels correlate with labels? What evidence distinguishes a near duplicate from two different captures of the same gesture?
 - **Exit and approval** · Team approves the EDA evidence, anomaly dispositions, grouping rationale, and constraints for splitting and preprocessing.
+- **Approved review protocol** · The owner accepted limited visual review and conservative co-grouping for the remaining same-label candidates. The versioned inventory, component audit, and residual capture-session risk are recorded in the [Phase 3 execution evidence](05_TEST_PLAN.md#phase-3-execution-evidence).
 
 ## Phase 4 — Dataset splitting and preprocessing
 

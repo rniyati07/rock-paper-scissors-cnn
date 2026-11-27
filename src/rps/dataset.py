@@ -6,9 +6,11 @@ import csv
 from dataclasses import asdict, dataclass, fields
 from datetime import UTC, datetime
 import hashlib
+from io import BytesIO
 import json
 import ntpath
 from pathlib import Path
+from random import Random
 import shutil
 import stat
 from tempfile import TemporaryDirectory
@@ -16,6 +18,7 @@ import unicodedata
 import warnings
 from zipfile import ZipFile
 
+import numpy as np
 from PIL import Image
 
 
@@ -346,6 +349,151 @@ def prepare_dataset(source, workspace):
     }
     write_outputs(run, provenance, rows)
     return run
+
+
+def load_validated_inventory(workspace, dataset_id, inventory_sha256):
+    raw = workspace / "data" / "raw" / dataset_id
+    manifests = workspace / "data" / "manifests" / dataset_id
+    inventory = manifests / "inventory.csv"
+    provenance = json.loads((manifests / "provenance.json").read_text(encoding="utf-8"))
+    if provenance["sha256"] != dataset_id or sha256_file(raw / "archive.zip") != dataset_id:
+        raise ValueError("Archive identity differs from the approved release")
+    if sha256_file(inventory) != inventory_sha256:
+        raise ValueError("Inventory identity differs from the approved inventory")
+    with inventory.open(encoding="utf-8", newline="") as handle:
+        rows = []
+        for values in csv.DictReader(handle):
+            for key in ("width", "height", "channels"):
+                values[key] = int(values[key]) if values[key] else None
+            values["size_bytes"] = int(values["size_bytes"])
+            rows.append(ImageRow(**values))
+    if {row.dataset_id for row in rows} != {dataset_id}:
+        raise ValueError("Inventory contains unexpected dataset IDs")
+    if len({row.image_id for row in rows}) != len(rows):
+        raise ValueError("Duplicate image IDs in inventory")
+    return raw / "extracted", rows
+
+
+def sample_class_rows(rows, count, seed):
+    rng = Random(seed)
+    ordered = sorted(rows, key=lambda row: row.image_id)
+    samples = {}
+    for label in CLASSES:
+        members = [row for row in ordered if row.label == label]
+        samples[label] = rng.sample(members, min(count, len(members)))
+    return samples
+
+
+def difference_hash(image):
+    gray = np.asarray(image.convert("L").resize((9, 8), Image.Resampling.LANCZOS))
+    bits = np.packbits(gray[:, 1:] > gray[:, :-1])
+    return int.from_bytes(bits.tobytes(), "big")
+
+
+def screen_hashes(hashes, radius):
+    counts = [0] * 65
+    candidates = []
+    ordered = sorted(hashes.items())
+    for index, (left, first) in enumerate(ordered):
+        for right, second in ordered[index + 1:]:
+            distance = (first ^ second).bit_count()
+            counts[distance] += 1
+            if distance <= radius:
+                candidates.append((left, right, distance))
+    return counts, sorted(candidates, key=lambda pair: (pair[2], pair[0], pair[1]))
+
+
+def border_mask(height, width, border_width):
+    if not 0 < 2 * border_width < min(height, width):
+        raise ValueError("Border width must leave a nonempty interior")
+    mask = np.ones((height, width), dtype=bool)
+    mask[border_width:-border_width, border_width:-border_width] = False
+    return mask
+
+
+def measure_image(path, border_width, expected_sha256=None):
+    content = path.read_bytes()
+    if expected_sha256 and hashlib.sha256(content).hexdigest() != expected_sha256:
+        raise ValueError(f"Image differs from approved inventory: {path}")
+    with Image.open(BytesIO(content)) as image:
+        pixels = np.asarray(image.convert("RGB"))
+        image_hash = difference_hash(image)
+        metadata_keys = sorted(image.info)
+        exif_tags = sorted(image.getexif())
+    height, width, _ = pixels.shape
+    border = pixels[border_mask(height, width, border_width)]
+    red, green, blue = np.moveaxis(pixels, -1, 0)
+    # Rec. 709 coefficients on stored RGB, used here as a brightness proxy.
+    luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+    luminance_histogram = np.bincount(np.rint(luminance).astype(np.uint8).ravel(), minlength=256)
+    return {
+        "rgb_histograms": np.stack([np.bincount(channel.ravel(), minlength=256) for channel in (red, green, blue)]),
+        "luminance_histogram": luminance_histogram,
+        "luminance_quantiles": np.quantile(luminance, [0.05, 0.5, 0.95]).tolist(),
+        "brightness": float(luminance.mean()),
+        "edge_strength": float((np.abs(np.diff(luminance, axis=0)).mean()
+                                + np.abs(np.diff(luminance, axis=1)).mean()) / 2),
+        "border_mean_rgb": border.mean(axis=0).tolist(),
+        "border_green_share": float(((border[:, 1] > border[:, 0]) & (border[:, 1] > border[:, 2])).mean()),
+        "dhash": image_hash,
+        "metadata_keys": metadata_keys,
+        "exif_tags": exif_tags,
+    }
+
+
+def connected_groups(rows, links):
+    parents = {row.image_id: row.image_id for row in rows}
+
+    def root(image_id):
+        if image_id not in parents:
+            raise ValueError(f"Unknown image in grouping: {image_id}")
+        while parents[image_id] != image_id:
+            parents[image_id] = parents[parents[image_id]]
+            image_id = parents[image_id]
+        return image_id
+
+    exact_links = [(row.image_id, row.representative_id) for row in rows if row.representative_id]
+    for left, right in [*exact_links, *links]:
+        first, second = sorted((root(left), root(right)))
+        parents[second] = first
+    return {image_id: f"group:{root(image_id)}" for image_id in sorted(parents)}
+
+
+def write_csv(path, records, columns):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(prefix=".csv-", dir=path.parent) as temp:
+        staged = Path(temp) / path.name
+        with staged.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=columns, lineterminator="\n")
+            writer.writeheader()
+            writer.writerows(records)
+        staged.replace(path)
+
+
+def sync_reviews(path, cases, choices):
+    review_fields = ("decision", "reviewer", "rationale")
+    columns = [*cases[0], *review_fields] if cases else ["case_id", *review_fields]
+    if not path.exists():
+        write_csv(path, [case | dict.fromkeys(review_fields, "") for case in cases], columns)
+    with path.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        if reader.fieldnames != columns:
+            raise ValueError(f"Review columns differ from generated schema: {path}")
+        records = list(reader)
+    expected = {case["case_id"]: case for case in cases}
+    actual = {record["case_id"]: record for record in records}
+    if len(records) != len(actual) or actual.keys() != expected.keys():
+        raise ValueError(f"Review case IDs changed: {path}")
+    for case_id, record in actual.items():
+        if None in record or None in record.values():
+            raise ValueError(f"Review row has the wrong number of fields: {case_id}")
+        if any(record[key] != value for key, value in expected[case_id].items()):
+            raise ValueError(f"Review case evidence changed: {case_id}")
+        decision, reviewer, rationale = (record[key].strip() for key in review_fields)
+        if decision and (decision not in choices or not reviewer or not rationale):
+            raise ValueError(f"Review requires a valid decision, reviewer and rationale: {case_id}")
+        record.update(zip(review_fields, (decision, reviewer, rationale)))
+    return [actual[case["case_id"]] for case in cases]
 
 
 def main():

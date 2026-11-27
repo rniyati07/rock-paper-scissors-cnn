@@ -2,7 +2,7 @@
 
 This learning project will train a custom convolutional neural network to classify a still image of one hand as **Rock**, **Paper**, or **Scissors**. It follows the full deep learning workflow so students can explain how data quality, CNN architecture, and evaluation choices affect the result.
 
-**Status** · Phases 1 and 2 are closed. The project owner accepted the measured dataset counts and documented discrepancy. Phase 3 awaits separate approval.
+**Status** · Phases 1–3 are closed. Phase 4 awaits separate approval.
 
 ## Scope and learning outcomes
 
@@ -95,6 +95,17 @@ From the project root, run the approved archive through the local Python 3.13 en
 ```
 
 Review the checks and observed counts in the [Test Plan](docs/05_TEST_PLAN.md#phase-2-execution-evidence).
+
+### Phase 3 exploratory data analysis
+
+Open [01_eda.ipynb](notebooks/01_eda.ipynb) in VS Code, select **Python 3.13 (RPS CNN)**, and run all cells. The notebook verifies the approved archive and inventory, then prints the local figure and review directories. From the project root you can also execute it with a fresh kernel from PowerShell.
+
+```powershell
+.\.venv313\Scripts\python.exe -c "import nbformat; from nbclient import NotebookClient; nb = nbformat.read('notebooks/01_eda.ipynb', as_version=4); NotebookClient(nb, timeout=300, kernel_name='rps-cnn-313').execute()"
+.\.venv313\Scripts\python.exe -m pytest -q
+```
+
+The local `image-review.csv`, `pair-review.csv`, and `calibration-review.csv` contain the owner's recorded case decisions. The accompanying `review-policy.json` records the approved waiver for the remaining cases. Rerunning validates those records and regenerates the versioned inventory, group map, and review snapshot. The output `summary.json` lists their filenames and checksums. [Phase 3 evidence](docs/05_TEST_PLAN.md#phase-3-execution-evidence)
 
 ### Later phases
 

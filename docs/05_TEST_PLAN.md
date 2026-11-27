@@ -115,7 +115,7 @@ The original Python 3.11.9 setup passed local verification before the approved m
 
 ## Phase 2 execution evidence
 
-**Phase 2 closed** · The project owner approved closure based on the acquisition, inventory, and exact-duplicate evidence. The owner accepted the measured counts and the published-count discrepancy while preserving the original source labels. Phase 3 awaits separate approval. Its TP-04 broader visual and anomaly review and TP-05 perceptual and capture-session checks remain pending.
+**Phase 2 closed** · The project owner approved closure based on the acquisition, inventory, and exact-duplicate evidence. The owner accepted the measured counts and the published-count discrepancy while preserving the original source labels. The [Phase 3 evidence](#phase-3-execution-evidence) tracks the follow-up visual, perceptual, and capture-session checks.
 
 | Check | Status | Evidence |
 | --- | --- | --- |
@@ -135,3 +135,35 @@ The accepted inventory has two more Paper and two fewer Scissors images than the
 The full `.venv313` suite reported **21 passed** with two existing Keras deprecation warnings from the Phase 1 serialization test. A second run on the approved ZIP produced byte-identical provenance, inventory, and validation files. The inventory SHA-256 is `3ce3874c12e586aa4d29677be44e6a16155cbde82713ed980c8a0ed1acd1ff50`.
 
 Local evidence includes the [provenance JSON](../data/manifests/3ba1e5daf5beba5358afe6f9c2e43ff9040789603e0405a81a50353a3ae2d508/provenance.json), [inventory CSV](../data/manifests/3ba1e5daf5beba5358afe6f9c2e43ff9040789603e0405a81a50353a3ae2d508/inventory.csv), [validation report](../artifacts/data/3ba1e5daf5beba5358afe6f9c2e43ff9040789603e0405a81a50353a3ae2d508/validation.json), and [label spot-check](../artifacts/data/3ba1e5daf5beba5358afe6f9c2e43ff9040789603e0405a81a50353a3ae2d508/label-spot-check.png). Git ignores these directories.
+
+## Phase 3 execution evidence
+
+**Phase 3 closed** · The project owner approved a limited visual review and authorized closure once the revised checks passed. TP-04, TP-05, and TP-06 passed under the approved review policy. Phase 4 awaits separate approval. The approved archive and Phase 2 inventory hashes above identify the inputs.
+
+The owner reviewed 36 of 75 image cases and 40 of 128 pair cases. The recorded pair decisions are 19 confirmed near duplicates, 12 conservative co-groupings, and 9 distinct pairs, including all 8 cross-label cases. Under the approved waiver, 88 unreviewed same-label candidates receive conservative links. The other 39 image cases retain their source labels and eligibility based on available evidence. Their visual review fields remain blank. The grouping snapshot records the coverage and policy categories separately.
+
+| Check | Status | Observed evidence |
+| --- | --- | --- |
+| TP-04 · Inventory and anomalies | Passed under the approved review policy | All 4,376 RGB PNG rows reconcile. The finalized inventory retains 726 Rock, 712 Paper, and 750 Scissors representatives. It retains the 2,188 exact-copy exclusions and has zero pending rows, new exclusions, or label corrections. The 13 restored IDs match the previous quarantine and the endpoints of the distinct cross-label pairs. |
+| TP-05 · Duplicates and sessions | Passed under the approved grouping policy | Screened 2,392,578 unordered representative pairs. An independent graph traversal verified 2,087 components covering every row, including 2,188 exact-copy and 119 non-exact links. It found no mixed-label groups and no distinct pair endpoints sharing a component. Group support was 669 Rock, 684 Paper, and 734 Scissors. No trusted session links were found. |
+| TP-06 · EDA consistency | Passed | Two fresh `.venv313` kernels each ran all 16 cells after the policy change. The 46 compared outputs were byte-identical, including 35 figures and contact sheets, the final inventory, group map, and review snapshot. Class totals reconcile with the inventory. The figures use decoded entries for geometry, eligible images for per-image statistics, eligible class pixels for intensity histograms, and all unordered eligible pairs for the distance histogram. |
+
+**Measured findings.** The per-image mean brightness proxy ranged from 77.37 to 167.40 on the 0–255 scale. Median image brightness for Rock, Paper, and Scissors was 119.20, 119.63, and 118.06. With a 10-pixel border, the respective median shares of pixels where green exceeded red and blue were 91.69%, 91.03%, and 90.81%. The three distributions share a predominantly green border. The class medians alone give limited evidence about class-associated cues.
+
+**Screening and calibration.** Distance bins 0–5 contained 6, 28, 85, 197, 402, and 766 pairs. A provisional radius of 2 yields 119 cases, about 0.005% of all pairs. The next bin adds 197. The review includes eight additional cross-label pairs at distances 3–4 and one visually similar same-label boundary example (D08). The 127 primary cases are paged eight per sheet, and D08 appears on a calibration sheet with its own review row.
+
+The owner confirmed `P001`, `P003–P007`, `P011`, `P014`, `P016–P021`, `P024`, `P113`, `P115`, `P117`, and `D08`. The owner approved conservative co-grouping for `P002`, `P008–P010`, `P012`, `P013`, `P015`, `P022`, `P023`, `P114`, `P118`, and `P119`. The distinct decisions cover `P116` and `P120–P127`. The retained gallery IDs are `I001–I012`, `I022–I033`, and `I043–I054`.
+
+The final component sizes by eligible representative count are 2,018 singletons, 50 pairs, 13 triples, 3 groups of 4, 2 groups of 6, and 1 group of 7.
+
+**Pilot visual observations.** D02 has an equal dHash despite different wrist cuff visibility and framing. D07 at distance 3 shows a fist and an open hand. D08 at the same distance shows similar finger placement and framing in two Paper images and was confirmed by the owner. The eight distinct priority pairs P120–P127 visibly differ in finger extension, despite broadly similar framing. In the image review, the sleeve covers much of the hand in I013, I019 appears blurred, and I022 shows wrist pixels in the right border. The dark tail includes black sleeves, so its brightness statistic reflects scene content as well as illumination.
+
+**Capture-session limits.** All image filenames have 16-character alphanumeric stems. PNG metadata in the 2,188 representatives contained DPI in two images and zero EXIF tags. ZIP member timestamps clustered on a single date within 38 seconds and have no corroborated capture meaning. Session-based grouping therefore has no trusted links. The uniform setup, partial visual coverage, and limited recall of dHash leave residual leakage risk. Conservative links can also merge distinct captures, which can constrain allocation.
+
+**Phase 4 questions.** Use training examples after split freeze to inspect aspect-ratio preservation and padding, scaling of the stored RGB range, and whether geometric or brightness previews preserve gesture and finger visibility. The border observations motivate a possible validation sensitivity check once a baseline exists. Group-aware allocation will use the reviewed components and eligible per-class counts.
+
+**Local evidence.** The `phase3-v1` subdirectory beneath the archive ID contains `summary.json` and PNGs under `artifacts/data/`. The corresponding directory under `data/manifests/` contains the review CSVs, `review-policy.json`, session evidence, and the versioned inventory, group map, and review snapshot. The summary records their filenames, hashes, runtime, source file hashes, and seed. The approved version is `1581e3886723a83ad16eac09dcaeeeab39e3e6ab104a1bb46ee023192d700748`. [Execution and review instructions](../README.md#phase-3-exploratory-data-analysis)
+
+The full Windows `.venv313` suite returned **28 passed, 1 skipped** with two existing Keras deprecation warnings. The skipped Colab transfer check requires its Phase 1 artifact environment variable and has separate recorded evidence above. Eight Phase 3 tests include a regression for the waiver, transitive quarantine, restored eligibility, and preserving unreviewed case evidence.
+
+The independent rerun audit matched all 4,376 image IDs, source labels, representative IDs, and component links to the Phase 2 lineage. The raw archive, inventory, provenance and Phase 2 validation report hashes matched before and after the run.
