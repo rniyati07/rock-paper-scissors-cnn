@@ -1,0 +1,26 @@
+{
+  "dataset_id": "3ba1e5daf5beba5358afe6f9c2e43ff9040789603e0405a81a50353a3ae2d508",
+  "inventory_version": "1581e3886723a83ad16eac09dcaeeeab39e3e6ab104a1bb46ee023192d700748",
+  "inventory_sha256": "1948b3d39b8252e85b4eb6a727724650a423c0cdccc505598c9da4fefac61808",
+  "groups_sha256": "4a96449317ca32819e103f114a8ef100c3a3046acd98ca7e3c81bef17430f472",
+  "seed": 42,
+  "contract": {
+    "schema_version": 1,
+    "height": 96,
+    "width": 144,
+    "pad_value": 128,
+    "color_mode": "RGB",
+    "exif_transpose": true,
+    "resize": "bilinear",
+    "padding": "center_constant",
+    "scale_divisor": 255,
+    "class_mapping": {"rock": 0, "paper": 1, "scissors": 2},
+    "augmentation": {
+      "rotation_degrees": 5,
+      "translation_fraction": 0.04,
+      "zoom_fraction": 0.05,
+      "brightness_delta": 0.04,
+      "horizontal_flip": false
+    }
+  }
+}

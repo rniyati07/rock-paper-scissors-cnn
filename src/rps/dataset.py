@@ -6,9 +6,10 @@ import csv
 from dataclasses import asdict, dataclass, fields
 from datetime import UTC, datetime
 import hashlib
-from io import BytesIO
+from io import BytesIO, StringIO
 import json
 import ntpath
+import os
 from pathlib import Path
 from random import Random
 import shutil
@@ -64,8 +65,21 @@ class DatasetRun:
     summary: dict
 
 
+def filesystem_path(path):
+    """Use extended-length Windows paths for filesystem I/O."""
+    path = Path(path)
+    if os.name != "nt":
+        return path
+    absolute = os.path.abspath(path)
+    if absolute.startswith(("\\\\?\\", "\\\\.\\")):
+        return Path(absolute)
+    if absolute.startswith("\\\\"):
+        return Path("\\\\?\\UNC\\" + absolute[2:])
+    return Path("\\\\?\\" + absolute)
+
+
 def sha256_file(path):
-    with path.open("rb") as stream:
+    with filesystem_path(path).open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
@@ -283,9 +297,12 @@ def summarize(rows, groups, metadata_files, dataset_id):
 
 
 def write_outputs(run, provenance, rows):
-    for path in (run.provenance.parent, run.report.parent):
-        path.mkdir(parents=True, exist_ok=True)
-    with TemporaryDirectory(prefix=".inventory-", dir=run.inventory.parent) as temp:
+    inventory = filesystem_path(run.inventory)
+    provenance_path = filesystem_path(run.provenance)
+    validation = filesystem_path(run.report)
+    for path in (inventory, provenance_path, validation):
+        path.parent.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(prefix=".inventory-", dir=inventory.parent) as temp:
         working = Path(temp)
         csv_path = working / run.inventory.name
         with csv_path.open("w", encoding="utf-8", newline="") as handle:
@@ -294,13 +311,13 @@ def write_outputs(run, provenance, rows):
             writer.writerows(asdict(row) for row in rows)
         json_path = working / run.provenance.name
         json_path.write_text(json.dumps(provenance, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
-        csv_path.replace(run.inventory)
-        json_path.replace(run.provenance)
-    run.summary["inventory_sha256"] = sha256_file(run.inventory)
-    with TemporaryDirectory(prefix=".validation-", dir=run.report.parent) as temp:
+        csv_path.replace(inventory)
+        json_path.replace(provenance_path)
+    run.summary["inventory_sha256"] = sha256_file(inventory)
+    with TemporaryDirectory(prefix=".validation-", dir=validation.parent) as temp:
         report = Path(temp) / run.report.name
         report.write_text(json.dumps(run.summary, indent=2) + "\n", encoding="utf-8", newline="\n")
-        report.replace(run.report)
+        report.replace(validation)
 
 
 def prepare_dataset(source, workspace):
@@ -353,7 +370,7 @@ def prepare_dataset(source, workspace):
 
 def load_validated_inventory(workspace, dataset_id, inventory_sha256):
     raw = workspace / "data" / "raw" / dataset_id
-    manifests = workspace / "data" / "manifests" / dataset_id
+    manifests = filesystem_path(workspace / "data" / "manifests" / dataset_id)
     inventory = manifests / "inventory.csv"
     provenance = json.loads((manifests / "provenance.json").read_text(encoding="utf-8"))
     if provenance["sha256"] != dataset_id or sha256_file(raw / "archive.zip") != dataset_id:
@@ -460,9 +477,10 @@ def connected_groups(rows, links):
 
 
 def write_csv(path, records, columns):
+    path = filesystem_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(prefix=".csv-", dir=path.parent) as temp:
-        staged = Path(temp) / path.name
+        staged = Path(temp) / "rows.csv"
         with staged.open("w", encoding="utf-8", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=columns, lineterminator="\n")
             writer.writeheader()
@@ -471,6 +489,7 @@ def write_csv(path, records, columns):
 
 
 def sync_reviews(path, cases, choices):
+    path = filesystem_path(path)
     review_fields = ("decision", "reviewer", "rationale")
     columns = [*cases[0], *review_fields] if cases else ["case_id", *review_fields]
     if not path.exists():
@@ -494,6 +513,202 @@ def sync_reviews(path, cases, choices):
             raise ValueError(f"Review requires a valid decision, reviewer and rationale: {case_id}")
         record.update(zip(review_fields, (decision, reviewer, rationale)))
     return [actual[case["case_id"]] for case in cases]
+
+
+SPLIT_PERCENT = {"train": 70, "validation": 15, "test": 15}
+SPLIT_COLUMNS = ("dataset_id", "inventory_version", "split_version", "image_id", "relative_path",
+                 "label", "group_id", "file_sha256", "pixel_sha256", "split")
+SPLIT_ALGORITHM = "group-count-squared-deviation-v1"
+SPLIT_ATTEMPTS = 16
+
+
+def _identity_csv(path, digest):
+    """Hash and parse the same snapshot even if a file is replaced concurrently."""
+    content = filesystem_path(path).read_bytes()
+    if hashlib.sha256(content).hexdigest() != digest:
+        raise ValueError(f"Source SHA-256 mismatch: {path.name}")
+    rows = list(csv.DictReader(StringIO(content.decode("utf-8"), newline="")))
+    indexed = {row["image_id"]: row for row in rows}
+    if not rows or len(indexed) != len(rows) or "" in indexed:
+        raise ValueError(f"Missing or duplicate source image IDs: {path.name}")
+    return indexed
+
+
+def _eligible_split_rows(source, identity):
+    version = identity["inventory_version"]
+    inventory = _identity_csv(source / f"inventory-{version}.csv", identity["inventory_sha256"])
+    groups = _identity_csv(source / f"groups-{version}.csv", identity["groups_sha256"])
+    if inventory.keys() != groups.keys():
+        raise ValueError("Inventory and group image IDs differ")
+    eligible = {}
+    paths = set()
+    for image_id, row in sorted(inventory.items()):
+        if row["dataset_id"] != identity["dataset_id"] or row["inventory_version"] != version:
+            raise ValueError("Source release or inventory version mismatch")
+        if any(row[key] != groups[image_id][key] for key in ("group_id", "label", "disposition")):
+            raise ValueError("Reviewed group records disagree with inventory")
+        if row["disposition"] == "excluded" and row["reason_code"]:
+            continue
+        if row["disposition"] != "eligible" or row["label"] not in CLASSES or not row["group_id"]:
+            raise ValueError("Unresolved disposition, class or group")
+        relative = row["relative_path"]
+        if ("\\" in relative or ntpath.splitdrive(relative)[0] or
+                any(part in ("", ".", "..") for part in relative.split("/")) or relative.casefold() in paths):
+            raise ValueError("Unsafe or duplicate source path")
+        paths.add(relative.casefold())
+        if not all(_is_sha256(row[key]) for key in ("pixel_sha256", "file_sha256")):
+            raise ValueError("Missing or invalid content hash")
+        eligible[image_id] = {key: row[key] for key in SPLIT_COLUMNS if key not in ("split", "split_version")}
+    return eligible
+
+
+def _is_sha256(value):
+    return isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdef" for c in value)
+
+
+def _allocate_groups(eligible, seed):
+    by_group = defaultdict(Counter)
+    totals = Counter()
+    for row in eligible.values():
+        by_group[row["group_id"]][row["label"]] += 1
+        totals[row["label"]] += 1
+    if any(sum(label in counts for counts in by_group.values()) < len(SPLIT_PERCENT) for label in CLASSES):
+        raise ValueError("Too few independent groups to cover each class in every split")
+
+    for attempt in range(SPLIT_ATTEMPTS):
+        rng = Random(seed + attempt)
+        ordered = sorted(by_group)
+        rng.shuffle(ordered)
+        ordered.sort(key=lambda group: -by_group[group].total())
+        counts = {split: Counter() for split in SPLIT_PERCENT}
+        assigned = {}
+        remaining_groups = Counter(label for group in ordered for label in by_group[group])
+        for group in ordered:
+            members = by_group[group]
+            remaining_groups.subtract(members.keys())
+            # The change in squared error is (error + group size)^2 - error^2.
+            # Normalize each term by its population to balance total and class counts.
+            def cost(split):
+                fraction = SPLIT_PERCENT[split] / 100
+                current = counts[split]
+                size = members.total()
+                delta = size * (2 * (current.total() - fraction * len(eligible)) + size) / len(eligible)
+                for label, n in members.items():
+                    delta += n * (2 * (current[label] - fraction * totals[label]) + n) / totals[label]
+                return delta
+
+            # Leave enough groups to cover the partitions still missing each class.
+            candidates = [
+                split for split in SPLIT_PERCENT
+                if all(sum(counts[other][label] == 0 for other in SPLIT_PERCENT if other != split)
+                       <= remaining_groups[label] for label in members)
+            ]
+            if not candidates:
+                break
+            rng.shuffle(candidates)
+            split = min(candidates, key=cost)
+            assigned[group] = split
+            counts[split].update(members)
+        if len(assigned) == len(by_group) and all(set(counts[split]) == set(CLASSES) for split in counts):
+            return assigned, seed + attempt
+    raise ValueError(f"Class coverage failed after {SPLIT_ATTEMPTS} seeded attempts; review group constraints")
+
+
+def _split_csv(records):
+    stream = StringIO(newline="")
+    writer = csv.DictWriter(stream, fieldnames=SPLIT_COLUMNS, lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(records)
+    return stream.getvalue().encode("utf-8")
+
+
+def _audit_split(records, eligible, version):
+    seen = set()
+    by_class = {split: dict.fromkeys(CLASSES, 0) for split in SPLIT_PERCENT}
+    owners = {key: {} for key in ("group_id", "file_sha256", "pixel_sha256")}
+    for row in records:
+        image_id, split = row["image_id"], row["split"]
+        if image_id in seen or image_id not in eligible or split not in by_class:
+            raise ValueError("Duplicate, unknown or invalid split assignment")
+        source = eligible[image_id]
+        if row["split_version"] != version or any(row[key] != value for key, value in source.items()):
+            raise ValueError("Split row differs from its approved source")
+        seen.add(image_id)
+        for key, values in owners.items():
+            if values.setdefault(row[key], split) != split:
+                raise ValueError(f"Cross-split overlap in {key}")
+        by_class[split][row["label"]] += 1
+    if seen != eligible.keys() or any(0 in counts.values() for counts in by_class.values()):
+        raise ValueError("Missing eligible images or incomplete class coverage")
+    return by_class
+
+
+def _publish_immutable(path, content):
+    """Atomically publish complete bytes without replacing an existing identity."""
+    path = filesystem_path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(dir=path.parent) as directory:
+        staged = Path(directory) / "publish"
+        staged.write_bytes(content)
+        try:
+            if os.name == "nt":
+                os.rename(staged, path)  # Windows refuses to rename over an existing file.
+            else:
+                os.link(staged, path)
+        except FileExistsError:
+            if path.read_bytes() != content:
+                raise ValueError(f"Existing {path.name} differs; preserve it and review the discrepancy") from None
+
+
+def phase4_split(root, config, action, expected_sha256=None, regenerate=False):
+    """Generate, audit, explicitly freeze, or verify the reviewed local split."""
+    if action not in ("split", "audit", "freeze", "frozen"):
+        raise ValueError("Unknown split action")
+    root = Path(root).resolve()
+    identity = {key: config[key] for key in ("dataset_id", "inventory_version", "inventory_sha256", "groups_sha256")}
+    if not all(_is_sha256(value) for value in identity.values()) or type(config["seed"]) is not int:
+        raise ValueError("Expected approved SHA-256 identities and an integer seed")
+    identity.update(seed=config["seed"], algorithm=SPLIT_ALGORITHM, target_percent=SPLIT_PERCENT,
+                    max_attempts=SPLIT_ATTEMPTS)
+    version = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+    base = root / "data" / "manifests" / identity["dataset_id"]
+    eligible = _eligible_split_rows(base / "phase3-v1", identity)
+    assigned, used_seed = _allocate_groups(eligible, identity["seed"])
+    canonical = _split_csv(row | {"split_version": version, "split": assigned[row["group_id"]]}
+                           for row in eligible.values())
+    manifest = base / "splits" / version / "split.csv"
+    if action == "split" and not regenerate:
+        _publish_immutable(manifest, canonical)
+    content = filesystem_path(manifest).read_bytes()
+    reader = csv.DictReader(StringIO(content.decode("utf-8"), newline=""))
+    if tuple(reader.fieldnames or ()) != SPLIT_COLUMNS:
+        raise ValueError("Split manifest schema differs")
+    per_class = _audit_split(reader, eligible, version)
+    if content != canonical:
+        raise ValueError("Manifest differs from canonical regeneration")
+    digest = hashlib.sha256(content).hexdigest()
+    counts = {split: sum(classes.values()) for split, classes in per_class.items()}
+    fractions = {split: count / len(eligible) for split, count in counts.items()}
+    report = dict(identity, split_version=version, sha256=digest, selected_seed=used_seed,
+                  counts=counts, per_class=per_class, actual_ratio=fractions,
+                  deviation={split: fractions[split] - percent / 100 for split, percent in SPLIT_PERCENT.items()},
+                  eligible_count=len(eligible), cross_split_overlap=dict.fromkeys(
+                      ("image_id", "group_id", "file_sha256", "pixel_sha256"), 0))
+    report_bytes = (json.dumps(report, sort_keys=True, indent=2) + "\n").encode()
+    evidence = root / "artifacts" / "data" / "phase4" / version
+    audit, marker = (filesystem_path(evidence / name) for name in ("audit.json", "frozen.json"))
+    if action == "audit":
+        _publish_immutable(audit, report_bytes)
+    if action in ("freeze", "frozen"):
+        if not audit.is_file() or audit.read_bytes() != report_bytes:
+            raise ValueError("Matching audit evidence required before freeze or downstream use")
+        if action == "freeze":
+            if digest != expected_sha256:
+                raise ValueError("Reviewed manifest SHA-256 required for freeze")
+            _publish_immutable(marker, report_bytes)
+        if not marker.is_file() or marker.read_bytes() != report_bytes:
+            raise ValueError("Matching frozen identity required before downstream use")
+    return report | {"manifest": str(manifest), "raw_root": str(root / "data" / "raw" / identity["dataset_id"] / "extracted")}
 
 
 def main():

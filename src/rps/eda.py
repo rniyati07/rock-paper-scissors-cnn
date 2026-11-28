@@ -40,7 +40,9 @@ def save_figure(fig, path):
 
 
 def write_json(path, values):
-    path.write_text(json.dumps(values, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
+    dataset.filesystem_path(path).write_text(
+        json.dumps(values, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n"
+    )
 
 
 def plot_inventory(rows, output):

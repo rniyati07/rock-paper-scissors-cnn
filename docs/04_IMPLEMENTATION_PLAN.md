@@ -8,6 +8,8 @@
 
 The roadmap follows Phases 0–11 in order. Each phase starts after the team has reviewed and explicitly approved the previous phase’s exit evidence. Record the reviewer, decision, evidence references, and any required follow-up in the phase record. The practical exercises and reflection questions in each phase are for self-directed learning. The paths below are proposed additions or updates for their scheduled stages. Phase 0 ends at review of the planning documents.
 
+From Phase 4 onward, Codex implements approved deliverables and prepares execution instructions, and the project owner runs the phase procedures and verification checks. Codex requires explicit authorization to run them. Phase conclusions and closure depend on actual execution evidence and the existing approval gates. [User-executed workflow](../AGENTS.md#user-executed-workflow-from-phase-4-onward)
+
 Local VS Code is the primary development workspace. Google Colab is the exclusive execution environment for full epoch-based training, training-time validation, and training-related experiments. Local smoke checks, data workflows, offline validation analysis, final evaluation, and inference use the shared code and approved artifacts. Preserve the TRD §4 `src/rps/` package structure and use notebooks as readers, orchestrators, or explanations of shared logic.
 
 ## Milestones and dependencies
@@ -67,6 +69,7 @@ The critical path is the reviewed environment → validated inventory → EDA an
 - **Verification and traceability** · Regenerate identical assignments, check zero prohibited overlaps and all three classes per split, reconcile transferred rows, and verify shape, range, label alignment, train-only augmentation and local/Colab parity. FR-03, FR-04, NFR-01, NFR-04 · AC-01, AC-04, AC-05.
 - **Self-directed reflection** · Why does group integrity take priority over exact split proportions? Where would an accidental second scaling step show up?
 - **Exit and approval** · Team signs off on split identity, leakage audit, test isolation, data contract, and transfer checks. Resolve group-feasibility failures before Phase 5.
+- **Recorded outcome** · Phase 4 closed with owner approval after TP-07–TP-11 passed. Use the frozen split and preprocessing contract recorded in the Test Plan for later approved work. [Phase 4 execution evidence](05_TEST_PLAN.md#phase-4-execution-evidence)
 
 ## Phase 5 — CNN architecture design
 

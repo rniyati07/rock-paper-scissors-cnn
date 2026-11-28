@@ -67,6 +67,8 @@ Every case records its ID, phase, outcome (`pass`, `fail`, or `blocked`), execut
 
 ## Execution order, regression, and phase exits
 
+From Phase 4 onward, the project owner executes verification using the commands, inputs, environments, and expected outputs documented by Codex. Explicit authorization is required for Codex to execute a check. Record outcomes and draw conclusions after the owner supplies actual execution results. Keep checks without execution evidence pending. [User-executed workflow](../AGENTS.md#user-executed-workflow-from-phase-4-onward)
+
 1. Run environment checks and verify Phase 1 notebook execution. Verify acquisition and inventory before EDA, and approve anomaly and grouping decisions before split freeze.
 2. Audit split isolation and preprocessing before the model smoke checks. Run metric-reference checks before trusting training metrics. Reverify staging every time data moves to Colab.
 3. Review baseline and experiment evidence, then pass the mandatory Phase 8 release gate before Phase 9 test access. Finish the inference and clean-environment checks in Phases 10–11.
@@ -167,3 +169,27 @@ The final component sizes by eligible representative count are 2,018 singletons,
 The full Windows `.venv313` suite returned **28 passed, 1 skipped** with two existing Keras deprecation warnings. The skipped Colab transfer check requires its Phase 1 artifact environment variable and has separate recorded evidence above. Eight Phase 3 tests include a regression for the waiver, transitive quarantine, restored eligibility, and preserving unreviewed case evidence.
 
 The independent rerun audit matched all 4,376 image IDs, source labels, representative IDs, and component links to the Phase 2 lineage. The raw archive, inventory, provenance and Phase 2 validation report hashes matched before and after the run.
+
+## Phase 4 execution evidence
+
+**Phase 4 closed** · TP-07 through TP-11 met the acceptance criteria. The owner supplied the execution results and approved closure conditional on evidence validation. Read-only review reconciled the local evidence with the owner's results. Phase 5 awaits separate approval.
+
+| Check | Status | Observed evidence |
+| --- | --- | --- |
+| TP-07 · Split integrity | Passed | The frozen manifest matched the audit and the owner-reported regeneration checksum. All 2,188 eligible rows matched the approved inventory exactly once, and every split contains each class. Independent checks found zero overlap by image ID, group, file SHA-256, or decoded-pixel SHA-256. The owner-run tests passed the intentional-conflict rejection cases. |
+| TP-08 · Test isolation | Passed | The ZIP and filtered manifest matched their saved hashes. All 1,860 staged image names and byte hashes and their manifest rows matched the frozen train and validation assignments. Archive membership excluded test images, test label rows, and unfiltered manifests. The saved Colab report confirmed the same archive, split, contract, and counts. |
+| TP-09 · Deterministic preprocessing | Passed | Owner-run decoder tests covered PNG, JPEG EXIF orientation, RGB conversion, resizing, padding, and scaling. The approved contract produces 96 × 144 × 3 RGB float32 tensors in `[0,1]` with aspect-ratio-preserving bilinear sizing, centered padding at 128 before normalization, and division by 255 once. The hosted CPU report matched the shape and dtype and recorded a maximum absolute difference of **0.0** against `1e-5` for the fixed training reference. |
+| TP-10 · Labels and batching | Passed | The frozen mapping is `rock=0`, `paper=1`, `scissors=2`. Owner-run tests covered image-to-label alignment, repeatable seeded shuffle, stable validation order, rejection of incompatible mappings, and retention of the final partial batch. |
+| TP-11 · Augmentation boundary | Passed | The owner reviewed and approved the training grids. Both grid hashes and all six preview rows matched the approval record and frozen training assignments. Owner-run tests covered seeded replay, unchanged output with augmentation disabled, and rejection of validation augmentation. The baseline defaults to augmentation off. The approved optional settings are ±5° rotation, ±4% translation, ±5% zoom, and ±0.04 brightness on the normalized scale, with horizontal flip disabled. |
+
+| Split | Rock | Paper | Scissors | Total | Share |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Train | 508 | 498 | 525 | 1,531 | 69.9726% |
+| Validation | 109 | 107 | 113 | 329 | 15.0366% |
+| Test | 109 | 107 | 112 | 328 | 14.9909% |
+
+Seed `42` produced the frozen split version `b5fc922ce16bb57bf33a90859a18e8d17cc37b4f294955b4b63ca4d96a50cacb`, with manifest SHA-256 `e0d83c574e797be7f714c095cfe209816a98708ccab670f429b83d21697abb10`. The approved contract SHA-256 is `d8a84720ee9d18bef96fafee413d0b2918270d006a5c23ee239c1e0aa74b11fa`. The local evidence directory under `artifacts/data/phase4/<split-version>/` holds the split audit and freeze record, the approved preview and contract, and the staging audit, ZIP and `colab-verification.json` under `staging/`. The full assignment CSV stays local. [Phase 4 execution steps](../README.md#phase-4-owner-execution)
+
+The first owner-run suite reported 13 passed, 8 Windows path-length setup errors, and 802 warnings. After the file I/O and AutoGraph changes, the Phase 4 suite reported **22 passed in 24.21 s** and the inventory and EDA regression suite reported **26 passed in 8.13 s**. The owner reported Colab exit code 0. The initial upload checksum mismatch cleared after the upload finished. Installing the already-pinned Pillow 13.0.0 resolved the hosted version mismatch. The successful report records Python 3.13.16, TensorFlow 2.21.0, Keras 3.13.2, NumPy 2.4.6, and Pillow 13.0.0.
+
+**Limits.** Capture-session identity remains unknown, so the group and hash audits leave residual capture-related leakage risk. Cross-runtime parity covers one training image on CPU. The reserved test images remain local for the approved final evaluation.

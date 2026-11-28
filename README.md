@@ -2,7 +2,7 @@
 
 This learning project will train a custom convolutional neural network to classify a still image of one hand as **Rock**, **Paper**, or **Scissors**. It follows the full deep learning workflow so students can explain how data quality, CNN architecture, and evaluation choices affect the result.
 
-**Status** · Phases 1–3 are closed. Phase 4 awaits separate approval.
+**Status** · Phases 1–4 are closed. The frozen split contains 1,531 training, 329 validation, and 328 test images. The approved 96 × 144 RGB preprocessing contract passed local–Colab parity. Phase 5 awaits separate approval. [Phase 4 evidence](docs/05_TEST_PLAN.md#phase-4-execution-evidence)
 
 ## Scope and learning outcomes
 
@@ -106,6 +106,83 @@ Open [01_eda.ipynb](notebooks/01_eda.ipynb) in VS Code, select **Python 3.13 (RP
 ```
 
 The local `image-review.csv`, `pair-review.csv`, and `calibration-review.csv` contain the owner's recorded case decisions. The accompanying `review-policy.json` records the approved waiver for the remaining cases. Rerunning validates those records and regenerates the versioned inventory, group map, and review snapshot. The output `summary.json` lists their filenames and checksums. [Phase 3 evidence](docs/05_TEST_PLAN.md#phase-3-execution-evidence)
+
+### Phase 4 owner execution
+
+Use PowerShell from the repository root, the existing `.venv313`, and the local Phase 3 release. [configs/data.json](configs/data.json) pins the dataset, inventory and group hashes. Its 96 × 144 resolution and augmentation ranges are candidates until you review the training previews. Only aggregate counts, hashes, check results and training-preview observations are needed for reporting.
+
+**1. Run the local verification suite.** The split, preprocessing and staging tests use temporary fixtures. The three test files cover TP-07 through TP-11. Expect a passing Pytest summary and exit code zero. Pytest writes temporary test outputs.
+
+```powershell
+$py = '.\.venv313\Scripts\python.exe'
+& $py -m pytest tests/test_split.py tests/test_preprocessing.py tests/test_phase4_stage.py -q
+```
+
+**2. Generate and audit the candidate.** The [Phase 4 command module](src/rps/phase4.py) calls the group allocator in [dataset.py](src/rps/dataset.py). It reads the approved inventory and groups, preserves each whole group, and targets 70:15:15 by image count. Run each command after the previous one succeeds.
+
+```powershell
+& $py -m src.rps.phase4 split --config configs/data.json
+& $py -m src.rps.phase4 audit --config configs/data.json --regenerate
+```
+
+Expect JSON with `split_version`, manifest `sha256`, per-class counts, ratio deviations, and overlap counts. Review the totals against 2,188 images (726 Rock, 712 Paper, 750 Scissors). Every partition must contain all three classes, regeneration must match byte-for-byte, and all four overlap counts must be zero. The local assignments are in `data/manifests/<dataset_id>/splits/<split_version>/split.csv`. The aggregate evidence is in `artifacts/data/phase4/<split_version>/audit.json`. Below, **the evidence directory** means this latter directory.
+
+**3. Freeze the reviewed split.** If you accept the candidate, enter the full manifest `sha256` from the audit. Success prints the verified identity and writes `frozen.json` in the evidence directory. The full assignment CSV and all test images stay local.
+
+```powershell
+$splitHash = Read-Host 'Paste the reviewed manifest sha256'
+& $py -m src.rps.phase4 freeze --config configs/data.json --expected-sha256 $splitHash
+```
+
+**4. Review the training previews.** Open [phase4_data_preprocessing.ipynb](notebooks/phase4_data_preprocessing.ipynb) in VS Code. Select **Python 3.13 (RPS CNN)**, restart the kernel and run all cells. [preview.py](src/rps/preview.py) selects seeded training rows and displays the original, candidate size, 128 × 128 alternative, and each augmentation separately. [preprocessing.py](src/rps/preprocessing.py) provides the shared decoder and the `tf.data` batch builder tested in step 1.
+
+Expect two PNG grids, `preview-summary.json` in the evidence directory, and a candidate contract SHA-256. Check shape, float32 range, class mapping, finger visibility, clipping, padding and lighting. The baseline pipeline defaults to augmentation disabled. Horizontal flip is displayed as a trial. If you change the candidate dimensions or transform settings in `configs/data.json`, restart and rerun the notebook to review the new candidate.
+
+**5. Approve and freeze the preprocessing contract.** Run this only when you accept the candidate and its training previews. Enter the contract SHA-256 printed by that notebook run.
+
+```powershell
+$contractHash = Read-Host 'Paste the reviewed preprocessing contract SHA-256'
+& $py -m src.rps.phase4 approve-contract --config configs/data.json --expected-sha256 $contractHash
+```
+
+Success prints the contract hash and frozen record path. Under `contracts/<version>/` in the evidence directory, `frozen.json` binds the settings to the frozen split, preprocessing source hash and preview evidence. `approved-preview.json` preserves the reviewed training IDs and figure hashes.
+
+**6. Build the Colab bundle locally.** This requires both freeze records and the original train and validation files. The command checks their hashes and packages the filtered assignments, corresponding PNGs, contract, source files, runtime requirements and a CPU reference tensor from one training image.
+
+```powershell
+& $py -m src.rps.phase4 stage --config configs/data.json
+```
+
+Expect the train and validation counts to match the split audit. The command prints the ZIP path and `archive_sha256`. Under `staging/<bundle-version>/` in the evidence directory it writes `phase4-stage.zip` for upload and `staging-audit.json` for the local record.
+
+**7. Verify on a fresh hosted Colab runtime.** Use Python 3.13 with the matching versions of TensorFlow, Keras, NumPy and Pillow from `requirements.txt`. In the Colab Files panel, upload only `phase4-stage.zip` to `/content/`. Run this cell and paste the ZIP hash printed locally in step 6.
+
+```python
+import hashlib
+from pathlib import Path
+import subprocess
+import sys
+from zipfile import ZipFile
+
+archive = Path("/content/phase4-stage.zip")
+expected = input("Local archive_sha256: ").strip()
+with archive.open("rb") as stream:
+    if hashlib.file_digest(stream, "sha256").hexdigest() != expected:
+        raise ValueError("Upload checksum mismatch")
+
+directory = Path("/content/rps-phase4")
+directory.mkdir(exist_ok=False)
+with ZipFile(archive) as bundle:
+    bundle.extractall(directory)
+subprocess.run(
+    [sys.executable, "-B", "-m", "src.rps.phase4", "verify-stage",
+     "--root", str(directory), "--archive", str(archive), "--expected-sha256", expected],
+    cwd=directory, check=True,
+)
+print((directory / "colab-verification.json").read_text())
+```
+
+The verifier checks compatibility, file membership, and hashes before tensor comparison. A successful report includes `"status": "passed"`, the split and contract hashes, the development sample ID, runtime, counts, tensor shape and dtype, and maximum absolute difference on the normalized scale (at most `1e-5`). Download `/content/rps-phase4/colab-verification.json` and save it next to the local staging audit. If execution stops, share the error and completed steps. For phase review, provide the Pytest summary, aggregate split audit, approved preview observations and contract hash, staging audit, and Colab result.
 
 ### Later phases
 

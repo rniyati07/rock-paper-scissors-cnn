@@ -12,10 +12,16 @@ This project teaches the full image-classification lifecycle through a custom Te
 1. Confirm authorization for the current phase. Read the relevant specifications and inspect the affected code, repository state, and existing evidence.
 2. Explain the prerequisite concepts, proposed approach, significant decisions and alternatives, and expected outputs. List intended file changes, dependencies, ordered implementation tasks, and acceptance IDs.
 3. Wait for human approval of the phase implementation plan before changing code. Implement in small, reviewable steps.
-4. Explain important code, tensor shapes, mathematical operations, and the design rationale. Give exact execution commands and run available checks from the Test Plan.
+4. Explain important code, tensor shapes, mathematical operations, and the design rationale. Give exact execution steps and applicable checks from the Test Plan. From Phase 4 onward, follow the user-executed workflow below.
 5. Report the phase and status, files changed, decisions and evidence by requirement and check ID, commands and actual results, and unresolved issues or unrun checks. Update relevant documentation and stop for review. A phase is complete only when required evidence exists and a human approves it. Start each subsequent phase only with explicit approval.
 
 Integrate self-directed learning and practical exercises throughout development. In Phase 1, use the [prerequisite notebook](notebooks/00_prerequisite_learning.ipynb) to cover NumPy arrays, indexing and dimensions, image loading and visualization, RGB representation, pixel normalization, tensor creation and shapes, batch dimensions, a simple forward pass, and basic loss. Verify notebook execution for TP-02. Exercise inputs stay outside the project dataset and model evaluation.
+
+### User-executed workflow from Phase 4 onward
+
+- Codex designs and implements the approved Python modules, scripts, notebooks, configurations, and automated tests. The project owner executes the deliverables and checks in the specified local or Colab environment. Codex needs explicit authorization to execute project scripts, notebooks, automated tests, data-processing pipelines, training, or evaluation.
+- For each executable deliverable, provide its file path and purpose, required inputs and prerequisites, execution environment, and exact commands or notebook steps. Include expected terminal or notebook output, expected generated file paths and purposes, success criteria, and verification instructions.
+- Wait for the project owner's actual execution results before recording test outcomes, drawing conclusions from runs, or closing a phase. Keep unrun checks pending. Phase closure and entry to the next phase still require explicit approval.
 
 ## Implementation and verification
 
